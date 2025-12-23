@@ -34,7 +34,7 @@ pub struct ToolResult {
 pub fn tool_definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {
-            name: "list_files",
+            name: "silo_list_files",
             description: "Scans a local folder non-recursively.",
             input_schema: json!({
                 "type": "object",
@@ -46,7 +46,7 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
-            name: "read_file",
+            name: "silo_read_file",
             description: "Reads text content from a valid path.",
             input_schema: json!({
                 "type": "object",
@@ -58,7 +58,7 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
-            name: "search_knowledge_base",
+            name: "silo_search_knowledge_base",
             description: "Searches the local knowledge base (LanceDB).",
             input_schema: json!({
                 "type": "object",
@@ -74,6 +74,9 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
 
 pub async fn call_tool(db: &DatabaseHandle, call: ToolCallParams) -> ToolResult {
     match call.name.as_str() {
+        // New canonical names:
+        "silo_list_files" |
+        // Backward-compatible aliases:
         "list_files" => {
             let args: Result<ListFilesArgs, _> = serde_json::from_value(call.arguments);
             match args {
@@ -84,7 +87,7 @@ pub async fn call_tool(db: &DatabaseHandle, call: ToolCallParams) -> ToolResult 
                 Err(e) => err_text(format!("Invalid arguments: {e}")),
             }
         }
-        "read_file" => {
+        "silo_read_file" | "read_file" => {
             let args: Result<ReadFileArgs, _> = serde_json::from_value(call.arguments);
             match args {
                 Ok(args) => match read_file(args).await {
@@ -94,7 +97,7 @@ pub async fn call_tool(db: &DatabaseHandle, call: ToolCallParams) -> ToolResult 
                 Err(e) => err_text(format!("Invalid arguments: {e}")),
             }
         }
-        "search_knowledge_base" => {
+        "silo_search_knowledge_base" | "search_knowledge_base" => {
             let args: Result<SearchKnowledgeBaseArgs, _> = serde_json::from_value(call.arguments);
             match args {
                 Ok(args) => match search_knowledge_base(db, args).await {
