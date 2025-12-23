@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+  "apps/mcp-server",
+  # Future:
+  # "apps/desktop-ui",
+  # "crates/silo-core",
+]
+
+

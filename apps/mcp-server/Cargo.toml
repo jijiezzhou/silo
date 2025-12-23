@@ -1,0 +1,26 @@
+[package]
+name = "mcp-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "1.43.0", features = ["full"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+thiserror = "2.0.9"
+
+# Embedded vector DB (optional for Milestone 1 handshake)
+lancedb = { version = "0.4.5", optional = true }
+
+# Workaround: arrow-arith 51.x fails to compile with chrono >= 0.4.40 due to `quarter()` ambiguity.
+# Pin chrono below 0.4.40 until the transitive Arrow stack is upgraded.
+chrono = "=0.4.39"
+
+[features]
+# Default: no DB so the MCP handshake/tools compile without requiring extra system deps like `protoc`.
+default = []
+
+# Enable LanceDB-backed knowledge base (requires `protoc` to be installed and discoverable).
+lancedb = ["dep:lancedb"]
+
+
