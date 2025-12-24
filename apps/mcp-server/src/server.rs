@@ -1,11 +1,11 @@
-use crate::database::DatabaseHandle;
+use crate::state::SharedState;
 use crate::tools::{self, ToolCallParams, ToolResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-/// Runs a JSON-RPC 2.0 server over stdio, compatible with Anthropic MCP-style calls.
+/// Runs a JSON-RPC 2.0 server over stdio, compatible with MCP-style calls.
 ///
 /// Expected methods:
 /// - `initialize`: MCP handshake
@@ -13,7 +13,7 @@ use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
 /// - `tools/call`: executes a tool call
 ///
 /// We also support `mcp.list_tools` / `mcp.call_tool` as aliases for convenience.
-pub async fn run_stdio_server(db: DatabaseHandle) -> Result<(), ServerFatalError> {
+pub async fn run_stdio_server(state: SharedState) -> Result<(), ServerFatalError> {
     let stdin = io::stdin();
     let stdout = io::stdout();
 
@@ -45,11 +45,11 @@ pub async fn run_stdio_server(db: DatabaseHandle) -> Result<(), ServerFatalError
 
         // Notifications (no id) are allowed; we do not respond per JSON-RPC.
         let Some(id) = req.id.clone() else {
-            let _ = handle_request(req, &db).await;
+            let _ = handle_request(req, &state).await;
             continue;
         };
 
-        let resp = match handle_request(req, &db).await {
+        let resp = match handle_request(req, &state).await {
             Ok(result) => JsonRpcResponse::result(Some(id), result),
             Err(err) => JsonRpcResponse::<Value>::error(Some(id), err),
         };
@@ -60,7 +60,7 @@ pub async fn run_stdio_server(db: DatabaseHandle) -> Result<(), ServerFatalError
     Ok(())
 }
 
-async fn handle_request(req: JsonRpcRequest, db: &DatabaseHandle) -> Result<Value, JsonRpcError> {
+async fn handle_request(req: JsonRpcRequest, state: &SharedState) -> Result<Value, JsonRpcError> {
     if req.jsonrpc != "2.0" {
         return Err(JsonRpcError::invalid_request(
             "Only JSON-RPC 2.0 is supported".to_string(),
@@ -108,7 +108,7 @@ async fn handle_request(req: JsonRpcRequest, db: &DatabaseHandle) -> Result<Valu
                 JsonRpcError::invalid_params(format!("Invalid mcp.call_tool params: {e}"))
             })?;
 
-            let ToolResult { content, is_error } = tools::call_tool(db, call).await;
+            let ToolResult { content, is_error } = tools::call_tool(state, call).await;
             Ok(json!({ "content": content, "isError": is_error }))
         }
         other => Err(JsonRpcError::method_not_found(format!(
