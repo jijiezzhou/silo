@@ -14,6 +14,15 @@ This repository currently contains **Milestone 1** of the Data Layer: a standalo
 - **Tools**: `tools/list` + `tools/call` ✅
 - **Zero-panic**: errors return structured JSON / error strings (no crashing) ✅
 
+### Configuration (Phase 2.0)
+
+Silo stores a local config file to keep indexing policy safe and controllable:
+
+- Default path: `~/.config/silo/config.json`
+- Override: set `SILO_CONFIG_PATH`
+
+By default, filesystem indexing roots are set to your **home directory** (`~`) with conservative exclusions (e.g. `.git/`, `node_modules/`, `target/`, secrets, caches).
+
 ### Repo layout
 
 - `apps/mcp-server`: MCP server (Rust 2024, Tokio, stdio JSON-RPC, MCP tools)
@@ -60,5 +69,14 @@ echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"silo_list_
 - The knowledge base integration (LanceDB) is **feature-gated** for fast onboarding:
   - Default build: runs without external system deps like `protoc`
   - Later: enable with `--features lancedb` once you want vector search
+
+### MCP tools (current)
+
+- `silo_list_files`
+- `silo_read_file`
+- `silo_get_config`
+- `silo_set_index_roots`
+- `silo_validate_index_config`
+- `silo_search_knowledge_base` (disabled unless built with `--features lancedb`)
 
 

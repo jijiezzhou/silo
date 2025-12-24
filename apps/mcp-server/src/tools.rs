@@ -1,4 +1,5 @@
-use crate::database::{Database, DatabaseHandle};
+use crate::database::DatabaseHandle;
+use crate::state::{expand_tilde, SharedState};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -69,10 +70,40 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                 "additionalProperties": false
             }),
         },
+        ToolDefinition {
+            name: "silo_get_config",
+            description: "Returns the effective Silo configuration (including config file path).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+        },
+        ToolDefinition {
+            name: "silo_set_index_roots",
+            description: "Sets filesystem indexing roots (MVP default is your home directory).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "roots": { "type": "array", "items": { "type": "string" }, "description": "Directories to index (supports ~/ prefix)." }
+                },
+                "required": ["roots"],
+                "additionalProperties": false
+            }),
+        },
+        ToolDefinition {
+            name: "silo_validate_index_config",
+            description: "Validates that configured indexing roots are accessible and sane.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+        },
     ]
 }
 
-pub async fn call_tool(db: &DatabaseHandle, call: ToolCallParams) -> ToolResult {
+pub async fn call_tool(state: &SharedState, call: ToolCallParams) -> ToolResult {
     match call.name.as_str() {
         // New canonical names:
         "silo_list_files" |
@@ -100,13 +131,30 @@ pub async fn call_tool(db: &DatabaseHandle, call: ToolCallParams) -> ToolResult 
         "silo_search_knowledge_base" | "search_knowledge_base" => {
             let args: Result<SearchKnowledgeBaseArgs, _> = serde_json::from_value(call.arguments);
             match args {
-                Ok(args) => match search_knowledge_base(db, args).await {
+                Ok(args) => match search_knowledge_base(&state.db, args).await {
                     Ok(v) => ok_json(v),
                     Err(e) => err_text(e),
                 },
                 Err(e) => err_text(format!("Invalid arguments: {e}")),
             }
         }
+        "silo_get_config" => match state.get_config_json().await {
+            v => ok_json(v),
+        },
+        "silo_set_index_roots" => {
+            let args: Result<SetIndexRootsArgs, _> = serde_json::from_value(call.arguments);
+            match args {
+                Ok(args) => {
+                    let roots: Vec<PathBuf> = args.roots.into_iter().map(|s| expand_tilde(&s)).collect();
+                    match state.set_index_roots(roots).await {
+                        Ok(v) => ok_json(v),
+                        Err(e) => err_text(e),
+                    }
+                }
+                Err(e) => err_text(format!("Invalid arguments: {e}")),
+            }
+        }
+        "silo_validate_index_config" => ok_json(state.validate_index_config().await),
         other => err_text(format!("Unknown tool: {other}")),
     }
 }
@@ -146,8 +194,13 @@ struct SearchKnowledgeBaseArgs {
     query: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct SetIndexRootsArgs {
+    roots: Vec<String>,
+}
+
 async fn list_files(args: ListFilesArgs) -> Result<Value, String> {
-    let dir = PathBuf::from(args.directory);
+    let dir = expand_tilde(&args.directory);
     let mut entries = tokio::fs::read_dir(&dir)
         .await
         .map_err(|e| format!("Failed to read directory {}: {e}", dir.display()))?;
@@ -175,7 +228,7 @@ async fn list_files(args: ListFilesArgs) -> Result<Value, String> {
 }
 
 async fn read_file(args: ReadFileArgs) -> Result<Value, String> {
-    let path = PathBuf::from(args.path);
+    let path = expand_tilde(&args.path);
     validate_safe_path(&path)?;
 
     let content = tokio::fs::read_to_string(&path)
