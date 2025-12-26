@@ -35,6 +35,7 @@ By default, filesystem indexing roots are set to your **home directory** (`~`) w
 
 - **Rust toolchain**: install via `rustup`
 - Optional (only if enabling LanceDB feature later): **`protoc`** (protobuf compiler)
+- For PDF extraction (Phase 2.2): **`pdftotext`** via Poppler (`brew install poppler`)
 
 #### Build/run MCP server
 
@@ -78,6 +79,7 @@ echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"silo_list_
 - `silo_set_index_roots`
 - `silo_validate_index_config`
 - `silo_preview_index` (Phase 2.1: deterministic preview scan of what would be indexed)
+- `silo_preview_extract` (Phase 2.2: extract text from file/PDF and return a preview)
 - `silo_search_knowledge_base` (disabled unless built with `--features lancedb`)
 
 

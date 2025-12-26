@@ -108,6 +108,7 @@ fn default_allow_extensions() -> Vec<String> {
         "java", "kt", "go", "rb", "php",
         "html", "css", "scss",
         "sql",
+        "pdf",
     ]
     .into_iter()
     .map(|s| s.to_string())

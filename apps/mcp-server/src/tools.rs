@@ -112,6 +112,19 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                 "additionalProperties": false
             }),
         },
+        ToolDefinition {
+            name: "silo_preview_extract",
+            description: "Extracts text from a file (supports PDF via pdftotext) and returns a short preview (no embeddings).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "File path to extract (supports ~/ prefix)." },
+                    "max_preview_chars": { "type": "integer", "minimum": 0, "maximum": 20000, "default": 2000 }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+            }),
+        },
     ]
 }
 
@@ -190,6 +203,45 @@ pub async fn call_tool(state: &SharedState, call: ToolCallParams) -> ToolResult 
                 Err(e) => err_text(format!("Invalid arguments: {e}")),
             }
         }
+        "silo_preview_extract" => {
+            let args: Result<PreviewExtractArgs, _> = serde_json::from_value(call.arguments);
+            match args {
+                Ok(args) => {
+                    let path = expand_tilde(&args.path);
+                    if let Err(e) = validate_safe_path(&path) {
+                        return err_text(e);
+                    }
+
+                    // Use configured max_text_bytes when available.
+                    let max_text_bytes = state
+                        .fs_policy
+                        .read()
+                        .await
+                        .as_ref()
+                        .map(|p| p.max_text_bytes)
+                        .unwrap_or(2 * 1024 * 1024);
+
+                    let extracted = match crate::extract::extract_text(&path, max_text_bytes).await {
+                        Ok(v) => v,
+                        Err(e) => return err_text(e),
+                    };
+
+                    let max_preview_chars = args.max_preview_chars.unwrap_or(2000);
+                    let preview = extracted.text.chars().take(max_preview_chars).collect::<String>();
+                    let preview_truncated = extracted.text.chars().count() > max_preview_chars;
+
+                    ok_json(json!({
+                        "path": path.to_string_lossy(),
+                        "kind": format!("{:?}", extracted.kind).to_lowercase(),
+                        "text_len_chars": extracted.text.chars().count(),
+                        "truncated_to_max_text_bytes": extracted.truncated,
+                        "preview_truncated": preview_truncated,
+                        "preview": preview
+                    }))
+                }
+                Err(e) => err_text(format!("Invalid arguments: {e}")),
+            }
+        }
         other => err_text(format!("Unknown tool: {other}")),
     }
 }
@@ -240,6 +292,13 @@ struct PreviewIndexArgs {
     max_sample_candidates: Option<usize>,
     #[serde(default)]
     max_sample_skipped: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PreviewExtractArgs {
+    path: String,
+    #[serde(default)]
+    max_preview_chars: Option<usize>,
 }
 
 async fn list_files(args: ListFilesArgs) -> Result<Value, String> {
