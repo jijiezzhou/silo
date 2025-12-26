@@ -100,6 +100,18 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                 "additionalProperties": false
             }),
         },
+        ToolDefinition {
+            name: "silo_preview_index",
+            description: "Scans configured roots and returns a deterministic preview of what would be indexed (no embeddings).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "max_sample_candidates": { "type": "integer", "minimum": 0, "maximum": 5000, "default": 200 },
+                    "max_sample_skipped": { "type": "integer", "minimum": 0, "maximum": 5000, "default": 200 }
+                },
+                "additionalProperties": false
+            }),
+        },
     ]
 }
 
@@ -155,6 +167,29 @@ pub async fn call_tool(state: &SharedState, call: ToolCallParams) -> ToolResult 
             }
         }
         "silo_validate_index_config" => ok_json(state.validate_index_config().await),
+        "silo_preview_index" => {
+            let args: Result<PreviewIndexArgs, _> = serde_json::from_value(call.arguments);
+            match args {
+                Ok(args) => {
+                    let policy_opt = state.fs_policy.read().await;
+                    let Some(policy) = policy_opt.as_ref() else {
+                        return err_text("No filesystem policy configured".to_string());
+                    };
+
+                    let roots = state.filesystem_roots().await;
+                    let opts = crate::filesystem::ScanOptions {
+                        max_sample_candidates: args.max_sample_candidates.unwrap_or(200),
+                        max_sample_skipped: args.max_sample_skipped.unwrap_or(200),
+                    };
+
+                    let summary = crate::filesystem::preview_index(roots, policy, opts).await;
+                    ok_json(serde_json::to_value(summary).unwrap_or_else(|e| {
+                        json!({"error": format!("failed to serialize scan summary: {e}")})
+                    }))
+                }
+                Err(e) => err_text(format!("Invalid arguments: {e}")),
+            }
+        }
         other => err_text(format!("Unknown tool: {other}")),
     }
 }
@@ -197,6 +232,14 @@ struct SearchKnowledgeBaseArgs {
 #[derive(Debug, Deserialize)]
 struct SetIndexRootsArgs {
     roots: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PreviewIndexArgs {
+    #[serde(default)]
+    max_sample_candidates: Option<usize>,
+    #[serde(default)]
+    max_sample_skipped: Option<usize>,
 }
 
 async fn list_files(args: ListFilesArgs) -> Result<Value, String> {

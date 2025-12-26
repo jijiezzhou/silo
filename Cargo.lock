@@ -2501,6 +2501,7 @@ dependencies = [
 name = "mcp-server"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "chrono",
  "globset",
  "lancedb",

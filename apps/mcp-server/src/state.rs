@@ -101,6 +101,15 @@ impl AppState {
             "issues": issues
         })
     }
+
+    pub async fn filesystem_roots(&self) -> Vec<PathBuf> {
+        let cfg = self.config.read().await;
+        if let Some(fs) = filesystem_source(&cfg) {
+            fs.roots.clone()
+        } else {
+            vec![]
+        }
+    }
 }
 
 fn filesystem_source(cfg: &SiloConfig) -> Option<&FileSystemSourceConfig> {

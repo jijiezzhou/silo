@@ -77,6 +77,7 @@ echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"silo_list_
 - `silo_get_config`
 - `silo_set_index_roots`
 - `silo_validate_index_config`
+- `silo_preview_index` (Phase 2.1: deterministic preview scan of what would be indexed)
 - `silo_search_knowledge_base` (disabled unless built with `--features lancedb`)
 
 

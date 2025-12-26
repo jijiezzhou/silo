@@ -1,5 +1,6 @@
 mod database;
 mod config;
+mod filesystem;
 mod server;
 mod state;
 mod tools;
