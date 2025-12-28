@@ -46,11 +46,10 @@ impl AppState {
 
         let mut updated = false;
         for src in &mut cfg.sources {
-            if let SourceConfig::FileSystem(fs) = src {
-                fs.roots = roots.clone();
-                updated = true;
-                break;
-            }
+            let SourceConfig::FileSystem(fs) = src;
+            fs.roots = roots.clone();
+            updated = true;
+            break;
         }
         if !updated {
             cfg.sources.push(SourceConfig::FileSystem(FileSystemSourceConfig {

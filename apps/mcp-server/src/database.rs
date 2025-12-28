@@ -4,6 +4,9 @@ use std::path::Path;
 #[cfg(feature = "lancedb")]
 use std::path::PathBuf;
 
+#[cfg(feature = "lancedb")]
+use std::sync::Arc;
+
 pub type DatabaseHandle = std::sync::Arc<Database>;
 
 const EMBEDDING_DIM: usize = 384;
@@ -31,6 +34,9 @@ pub enum DbError {
     #[cfg(feature = "lancedb")]
     #[error("lancedb error: {0}")]
     LanceDb(#[from] lancedb::Error),
+    #[cfg(feature = "lancedb")]
+    #[error("arrow error: {0}")]
+    Arrow(#[from] arrow_schema::ArrowError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,8 +59,11 @@ impl Database {
             const TABLE_NAME: &str = "documents";
             let data_dir = data_dir.as_ref().to_path_buf();
             tokio::fs::create_dir_all(&data_dir).await?;
-            let conn = lancedb::connect(data_dir.to_string_lossy().as_ref()).await?;
-            let table = conn.open_or_create_table(TABLE_NAME, &[]).await?;
+            // lancedb 0.4.x: connect(...) returns a builder; call execute().await to connect.
+            let conn = lancedb::connect(data_dir.to_string_lossy().as_ref())
+                .execute()
+                .await?;
+            let table = open_or_create_table(&conn, TABLE_NAME).await?;
             return Ok(Database::Enabled(EnabledDatabase {
                 data_dir,
                 table: std::sync::Arc::new(tokio::sync::Mutex::new(table)),
@@ -99,20 +108,24 @@ impl Database {
         let _ = (path, content);
         #[cfg(feature = "lancedb")]
         {
-            use serde_json::Value;
             let Database::Enabled(db) = self else {
                 return Ok(());
             };
 
-            let embedding = zero_embedding();
-            let row = serde_json::json!({
-                "path": path,
-                "content": content,
-                "embedding": embedding,
-            });
-
             let mut table = db.table.lock().await;
-            insert_rows(&mut table, vec![row]).await?;
+            add_row(
+                &mut table,
+                Row {
+                    id: blake3::hash(format!("{path}\n0").as_bytes()).to_hex().to_string(),
+                    path: path.to_string(),
+                    chunk_index: 0,
+                    start_token: 0,
+                    end_token: 0,
+                    content: content.to_string(),
+                    embedding: zero_embedding(),
+                },
+            )
+            .await?;
         }
         Ok(())
     }
@@ -132,59 +145,50 @@ impl Database {
         let _ = (id, path, chunk_index, start_token, end_token, content);
         #[cfg(feature = "lancedb")]
         {
-            use serde_json::Value;
             let Database::Enabled(db) = self else {
                 return Ok(());
             };
 
-            let embedding = zero_embedding();
-            let row = serde_json::json!({
-                "id": id,
-                "path": path,
-                "chunk_index": chunk_index as i64,
-                "start_token": start_token as i64,
-                "end_token": end_token as i64,
-                "content": content,
-                "embedding": embedding,
-            });
-
             let mut table = db.table.lock().await;
-            insert_rows(&mut table, vec![row]).await?;
+            add_row(
+                &mut table,
+                Row {
+                    id: id.to_string(),
+                    path: path.to_string(),
+                    chunk_index,
+                    start_token,
+                    end_token,
+                    content: content.to_string(),
+                    embedding: zero_embedding(),
+                },
+            )
+            .await?;
         }
         Ok(())
     }
 
     /// Searches documents (placeholder query embedding).
     pub async fn search_documents(&self, query: &str) -> Result<Vec<SearchHit>, DbError> {
-        let _ = query;
         #[cfg(feature = "lancedb")]
         {
-            use serde_json::Value;
+            use futures::TryStreamExt;
+            use lancedb::query::{ExecutableQuery, QueryBase};
+            let _ = query; // placeholder until real query embeddings
             let Database::Enabled(db) = self else {
                 return Ok(vec![]);
             };
 
             let embedding = zero_embedding();
             let table = db.table.lock().await;
-            let rows = search_rows(&table, embedding, 10).await?;
+            let stream: lancedb::arrow::SendableRecordBatchStream = table
+                .vector_search(embedding.as_slice())?
+                .column("embedding")
+                .limit(10)
+                .execute()
+                .await?;
 
-            let hits = rows
-                .into_iter()
-                .filter_map(|row| {
-                    let path = row.get("path")?.as_str()?.to_string();
-                    let score = row.get("_distance").and_then(|v| v.as_f64()).map(|f| f as f32);
-                    let content_preview = row
-                        .get("content")
-                        .and_then(|v| v.as_str())
-                        .map(|s| preview(s, 240));
-                    Some(SearchHit {
-                        path,
-                        score,
-                        content_preview,
-                    })
-                })
-                .collect();
-
+            let batches = stream.try_collect::<Vec<arrow_array::RecordBatch>>().await?;
+            let hits = batches_to_hits(batches);
             return Ok(hits);
         }
 
@@ -204,20 +208,114 @@ fn preview(s: &str, max_chars: usize) -> String {
     out
 }
 
+// --- LanceDB integration (feature-gated) ---
+
 #[cfg(feature = "lancedb")]
-async fn insert_rows(table: &mut lancedb::Table, rows: Vec<serde_json::Value>) -> Result<(), DbError> {
-    table.insert(&rows).await?;
+#[derive(Debug, Clone)]
+struct Row {
+    id: String,
+    path: String,
+    chunk_index: usize,
+    start_token: usize,
+    end_token: usize,
+    content: String,
+    embedding: Vec<f32>,
+}
+
+#[cfg(feature = "lancedb")]
+fn documents_schema() -> arrow_schema::SchemaRef {
+    use arrow_schema::{DataType, Field, Schema};
+    Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("path", DataType::Utf8, false),
+        Field::new("chunk_index", DataType::Int64, false),
+        Field::new("start_token", DataType::Int64, false),
+        Field::new("end_token", DataType::Int64, false),
+        Field::new("content", DataType::Utf8, false),
+        Field::new(
+            "embedding",
+            DataType::FixedSizeList(
+                Arc::new(Field::new("item", DataType::Float32, true)),
+                EMBEDDING_DIM as i32,
+            ),
+            true,
+        ),
+    ]))
+}
+
+#[cfg(feature = "lancedb")]
+async fn open_or_create_table(conn: &lancedb::Connection, name: &str) -> Result<lancedb::Table, DbError> {
+    match conn.open_table(name).execute().await {
+        Ok(t) => Ok(t),
+        Err(lancedb::Error::TableNotFound { .. }) => {
+            let schema = documents_schema();
+            Ok(conn.create_empty_table(name, schema).execute().await?)
+        }
+        Err(e) => Err(DbError::LanceDb(e)),
+    }
+}
+
+#[cfg(feature = "lancedb")]
+async fn add_row(table: &mut lancedb::Table, row: Row) -> Result<(), DbError> {
+    use arrow_array::{
+        types::Float32Type, FixedSizeListArray, Int64Array, RecordBatch, RecordBatchIterator,
+        StringArray,
+    };
+
+    let schema = documents_schema();
+
+    let id_arr = Arc::new(StringArray::from(vec![row.id]));
+    let path_arr = Arc::new(StringArray::from(vec![row.path]));
+    let chunk_index_arr = Arc::new(Int64Array::from(vec![row.chunk_index as i64]));
+    let start_token_arr = Arc::new(Int64Array::from(vec![row.start_token as i64]));
+    let end_token_arr = Arc::new(Int64Array::from(vec![row.end_token as i64]));
+    let content_arr = Arc::new(StringArray::from(vec![row.content]));
+
+    let emb_list = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+        std::iter::once(Some(row.embedding.into_iter().map(Some).collect::<Vec<_>>())),
+        EMBEDDING_DIM as i32,
+    );
+    let emb_arr = Arc::new(emb_list);
+
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            id_arr,
+            path_arr,
+            chunk_index_arr,
+            start_token_arr,
+            end_token_arr,
+            content_arr,
+            emb_arr,
+        ],
+    )?;
+
+    let batches = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema);
+    table.add(Box::new(batches)).execute().await?;
     Ok(())
 }
 
 #[cfg(feature = "lancedb")]
-async fn search_rows(
-    table: &lancedb::Table,
-    embedding: Vec<f32>,
-    limit: usize,
-) -> Result<Vec<serde_json::Value>, DbError> {
-    let rows: Vec<serde_json::Value> = table.search(&embedding).limit(limit).execute().await?;
-    Ok(rows)
+fn batches_to_hits(batches: Vec<arrow_array::RecordBatch>) -> Vec<SearchHit> {
+    use arrow_array::cast::AsArray;
+    let mut hits = vec![];
+    for b in batches {
+        let Some(path_col) = b.column_by_name("path") else { continue };
+        let paths = path_col.as_string::<i32>();
+
+        let content_opt = b.column_by_name("content").map(|c| c.as_string::<i32>());
+        let distance_opt = b.column_by_name("_distance").map(|c| c.as_primitive::<arrow_array::types::Float32Type>());
+
+        for i in 0..b.num_rows() {
+            let path = paths.value(i).to_string();
+            let content_preview = content_opt
+                .as_ref()
+                .map(|c| preview(c.value(i), 240));
+            let score = distance_opt.as_ref().map(|d| d.value(i));
+            hits.push(SearchHit { path, score, content_preview });
+        }
+    }
+    hits
 }
 
 

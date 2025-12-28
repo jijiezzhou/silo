@@ -4,7 +4,6 @@ use crate::extract::extract_text;
 use crate::state::expand_tilde;
 use blake3::Hash;
 use serde::Serialize;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct IngestStats {

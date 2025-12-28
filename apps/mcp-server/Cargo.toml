@@ -14,7 +14,10 @@ globset = "0.4.15"
 blake3 = "1.5.5"
 
 # Embedded vector DB (optional for Milestone 1 handshake)
-lancedb = { version = "0.4.5", optional = true }
+lancedb = { version = "=0.4.20", optional = true }
+arrow-array = { version = "=51.0.0", optional = true }
+arrow-schema = { version = "=51.0.0", optional = true }
+futures = { version = "0.3.31", optional = true }
 
 # Workaround: arrow-arith 51.x fails to compile with chrono >= 0.4.40 due to `quarter()` ambiguity.
 # Pin chrono below 0.4.40 until the transitive Arrow stack is upgraded.
@@ -25,6 +28,6 @@ chrono = "=0.4.39"
 default = []
 
 # Enable LanceDB-backed knowledge base (requires `protoc` to be installed and discoverable).
-lancedb = ["dep:lancedb"]
+lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
 
 
