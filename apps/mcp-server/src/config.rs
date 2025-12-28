@@ -53,6 +53,14 @@ pub struct FileSystemSourceConfig {
     /// Whether to follow symlinks (generally false for safety).
     #[serde(default)]
     pub follow_symlinks: bool,
+
+    /// Chunk size in (approx) tokens for ingestion (Phase 2.3).
+    #[serde(default = "default_chunk_tokens")]
+    pub chunk_tokens: usize,
+
+    /// Chunk overlap in (approx) tokens for ingestion (Phase 2.3).
+    #[serde(default = "default_chunk_overlap_tokens")]
+    pub chunk_overlap_tokens: usize,
 }
 
 impl Default for FileSystemSourceConfig {
@@ -65,6 +73,8 @@ impl Default for FileSystemSourceConfig {
             max_file_size_bytes: default_max_file_size_bytes(),
             max_text_bytes: default_max_text_bytes(),
             follow_symlinks: false,
+            chunk_tokens: default_chunk_tokens(),
+            chunk_overlap_tokens: default_chunk_overlap_tokens(),
         }
     }
 }
@@ -75,6 +85,14 @@ fn default_max_file_size_bytes() -> u64 {
 
 fn default_max_text_bytes() -> u64 {
     2 * 1024 * 1024 // 2MB extracted text cap
+}
+
+fn default_chunk_tokens() -> usize {
+    500
+}
+
+fn default_chunk_overlap_tokens() -> usize {
+    50
 }
 
 fn default_exclude_globs() -> Vec<String> {

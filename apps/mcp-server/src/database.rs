@@ -117,6 +117,43 @@ impl Database {
         Ok(())
     }
 
+    /// Stores a chunk row (placeholder embedding).
+    ///
+    /// This is the Phase 2.3 ingestion target. When embeddings become real, this will store those.
+    pub async fn add_chunk(
+        &self,
+        id: &str,
+        path: &str,
+        chunk_index: usize,
+        start_token: usize,
+        end_token: usize,
+        content: &str,
+    ) -> Result<(), DbError> {
+        let _ = (id, path, chunk_index, start_token, end_token, content);
+        #[cfg(feature = "lancedb")]
+        {
+            use serde_json::Value;
+            let Database::Enabled(db) = self else {
+                return Ok(());
+            };
+
+            let embedding = zero_embedding();
+            let row = serde_json::json!({
+                "id": id,
+                "path": path,
+                "chunk_index": chunk_index as i64,
+                "start_token": start_token as i64,
+                "end_token": end_token as i64,
+                "content": content,
+                "embedding": embedding,
+            });
+
+            let mut table = db.table.lock().await;
+            insert_rows(&mut table, vec![row]).await?;
+        }
+        Ok(())
+    }
+
     /// Searches documents (placeholder query embedding).
     pub async fn search_documents(&self, query: &str) -> Result<Vec<SearchHit>, DbError> {
         let _ = query;

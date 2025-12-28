@@ -2,6 +2,8 @@ mod database;
 mod config;
 mod filesystem;
 mod extract;
+mod chunk;
+mod ingest;
 mod server;
 mod state;
 mod tools;

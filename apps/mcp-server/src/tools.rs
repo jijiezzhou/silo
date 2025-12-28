@@ -125,6 +125,18 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                 "additionalProperties": false
             }),
         },
+        ToolDefinition {
+            name: "silo_ingest_file",
+            description: "Ingests a file: extract -> chunk (~500 tokens w/ overlap) -> (placeholder) embed -> store to LanceDB when enabled.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "File path to ingest (supports ~/ prefix)." }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+            }),
+        },
     ]
 }
 
@@ -242,6 +254,42 @@ pub async fn call_tool(state: &SharedState, call: ToolCallParams) -> ToolResult 
                 Err(e) => err_text(format!("Invalid arguments: {e}")),
             }
         }
+        "silo_ingest_file" => {
+            let args: Result<IngestFileArgs, _> = serde_json::from_value(call.arguments);
+            match args {
+                Ok(args) => {
+                    let fs_cfg = match state.filesystem_config().await {
+                        Some(c) => c,
+                        None => return err_text("No filesystem source configured".to_string()),
+                    };
+
+                    let max_text_bytes = state
+                        .fs_policy
+                        .read()
+                        .await
+                        .as_ref()
+                        .map(|p| p.max_text_bytes)
+                        .unwrap_or(2 * 1024 * 1024);
+
+                    let res = crate::ingest::process_file(
+                        &state.db,
+                        &args.path,
+                        max_text_bytes,
+                        fs_cfg.chunk_tokens,
+                        fs_cfg.chunk_overlap_tokens,
+                    )
+                    .await;
+
+                    match res {
+                        Ok(stats) => ok_json(serde_json::to_value(stats).unwrap_or_else(|e| {
+                            json!({"error": format!("failed to serialize ingest stats: {e}")})
+                        })),
+                        Err(e) => err_text(e),
+                    }
+                }
+                Err(e) => err_text(format!("Invalid arguments: {e}")),
+            }
+        }
         other => err_text(format!("Unknown tool: {other}")),
     }
 }
@@ -299,6 +347,11 @@ struct PreviewExtractArgs {
     path: String,
     #[serde(default)]
     max_preview_chars: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct IngestFileArgs {
+    path: String,
 }
 
 async fn list_files(args: ListFilesArgs) -> Result<Value, String> {

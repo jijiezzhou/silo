@@ -80,6 +80,7 @@ echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"silo_list_
 - `silo_validate_index_config`
 - `silo_preview_index` (Phase 2.1: deterministic preview scan of what would be indexed)
 - `silo_preview_extract` (Phase 2.2: extract text from file/PDF and return a preview)
+- `silo_ingest_file` (Phase 2.3: extract + chunk + store chunks to DB when enabled)
 - `silo_search_knowledge_base` (disabled unless built with `--features lancedb`)
 
 

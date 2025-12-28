@@ -110,11 +110,22 @@ impl AppState {
             vec![]
         }
     }
+
+    pub async fn filesystem_config(&self) -> Option<FileSystemSourceConfig> {
+        let cfg = self.config.read().await;
+        filesystem_source_owned(&cfg)
+    }
 }
 
 fn filesystem_source(cfg: &SiloConfig) -> Option<&FileSystemSourceConfig> {
     cfg.sources.iter().find_map(|s| match s {
         SourceConfig::FileSystem(fs) => Some(fs),
+    })
+}
+
+fn filesystem_source_owned(cfg: &SiloConfig) -> Option<FileSystemSourceConfig> {
+    cfg.sources.iter().find_map(|s| match s {
+        SourceConfig::FileSystem(fs) => Some(fs.clone()),
     })
 }
 
