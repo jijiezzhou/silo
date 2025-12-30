@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 pub type DatabaseHandle = std::sync::Arc<Database>;
 
-const EMBEDDING_DIM: usize = 384;
+const EMBEDDING_DIM: usize = crate::embed::EMBEDDING_DIM;
 
 #[derive(Clone)]
 pub enum Database {
@@ -141,8 +141,9 @@ impl Database {
         start_token: usize,
         end_token: usize,
         content: &str,
+        embedding: &[f32],
     ) -> Result<(), DbError> {
-        let _ = (id, path, chunk_index, start_token, end_token, content);
+        let _ = (id, path, chunk_index, start_token, end_token, content, embedding);
         #[cfg(feature = "lancedb")]
         {
             let Database::Enabled(db) = self else {
@@ -159,7 +160,7 @@ impl Database {
                     start_token,
                     end_token,
                     content: content.to_string(),
-                    embedding: zero_embedding(),
+                    embedding: embedding.to_vec(),
                 },
             )
             .await?;

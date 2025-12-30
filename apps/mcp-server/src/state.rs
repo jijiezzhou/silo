@@ -3,6 +3,7 @@ use crate::config::{
     FileSystemSourceConfig, SiloConfig, SourceConfig,
 };
 use crate::database::DatabaseHandle;
+use crate::embed::{EmbedderHandle, NoopEmbedder};
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -16,6 +17,7 @@ pub struct AppState {
     pub config_path: PathBuf,
     pub config: RwLock<SiloConfig>,
     pub fs_policy: RwLock<Option<CompiledFileSystemPolicy>>,
+    pub embedder: EmbedderHandle,
 }
 
 impl AppState {
@@ -25,11 +27,33 @@ impl AppState {
 
         let fs_policy = compile_from_config(&cfg)?;
 
+        let embedder: EmbedderHandle = {
+            #[cfg(feature = "embeddings")]
+            {
+                match crate::embed::FastEmbedder::try_new_default() {
+                    Ok(e) => {
+                        tracing::info!("Embedder initialized: fastembed (bge-small-en-v1.5)");
+                        Arc::new(e)
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to init fastembed embedder, falling back to noop: {e}");
+                        Arc::new(NoopEmbedder)
+                    }
+                }
+            }
+            #[cfg(not(feature = "embeddings"))]
+            {
+                tracing::info!("Embedder disabled (build without --features embeddings); using noop embedder");
+                Arc::new(NoopEmbedder)
+            }
+        };
+
         Ok(Arc::new(Self {
             db,
             config_path,
             config: RwLock::new(cfg),
             fs_policy: RwLock::new(fs_policy),
+            embedder,
         }))
     }
 

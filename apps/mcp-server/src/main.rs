@@ -4,6 +4,7 @@ mod filesystem;
 mod extract;
 mod chunk;
 mod ingest;
+mod embed;
 mod server;
 mod state;
 mod tools;

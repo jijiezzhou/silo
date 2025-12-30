@@ -1,5 +1,6 @@
 use crate::chunk::chunk_by_whitespace_tokens;
 use crate::database::DatabaseHandle;
+use crate::embed::EmbedderHandle;
 use crate::extract::extract_text;
 use crate::state::expand_tilde;
 use blake3::Hash;
@@ -23,6 +24,7 @@ pub struct IngestStats {
 /// 4) store chunks into LanceDB when enabled
 pub async fn process_file(
     db: &DatabaseHandle,
+    embedder: &EmbedderHandle,
     path: &str,
     max_text_bytes: u64,
     chunk_tokens: usize,
@@ -36,11 +38,30 @@ pub async fn process_file(
 
     let chunks = chunk_by_whitespace_tokens(&extracted.text, chunk_tokens, chunk_overlap_tokens);
 
+    let embeddings = embedder
+        .embed_texts(chunks.iter().map(|c| c.text.clone()).collect())
+        .await?;
+    if embeddings.len() != chunks.len() {
+        return Err(format!(
+            "embedder returned {} vectors for {} chunks",
+            embeddings.len(),
+            chunks.len()
+        ));
+    }
+
     // Store only if DB is enabled (feature `lancedb` and initialization succeeded).
     let stored = if db.is_enabled() {
-        for ch in &chunks {
+        for (ch, emb) in chunks.iter().zip(embeddings.iter()) {
             let id = chunk_id(&path_str, ch.index, &ch.text);
-            db.add_chunk(&id, &path_str, ch.index, ch.start_token, ch.end_token, &ch.text)
+            db.add_chunk(
+                &id,
+                &path_str,
+                ch.index,
+                ch.start_token,
+                ch.end_token,
+                &ch.text,
+                emb,
+            )
                 .await
                 .map_err(|e| format!("DB insert failed: {e}"))?;
         }

@@ -12,6 +12,10 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 globset = "0.4.15"
 blake3 = "1.5.5"
+async-trait = "0.1.86"
+
+# Local embeddings (optional; Phase 2.4)
+fastembed = { version = "4", optional = true }
 
 # Embedded vector DB (optional for Milestone 1 handshake)
 lancedb = { version = "=0.4.20", optional = true }
@@ -27,7 +31,13 @@ chrono = "=0.4.39"
 # Default: no DB so the MCP handshake/tools compile without requiring extra system deps like `protoc`.
 default = []
 
+# Enable local embeddings via fastembed (downloads model on first use).
+embeddings = ["dep:fastembed"]
+
 # Enable LanceDB-backed knowledge base (requires `protoc` to be installed and discoverable).
 lancedb = ["dep:lancedb", "dep:arrow-array", "dep:arrow-schema", "dep:futures"]
+
+# Convenience for MVP indexing/search stack.
+mvp = ["embeddings", "lancedb"]
 
 

@@ -70,6 +70,9 @@ echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"silo_list_
 - The knowledge base integration (LanceDB) is **feature-gated** for fast onboarding:
   - Default build: runs without external system deps like `protoc`
   - Later: enable with `--features lancedb` once you want vector search
+ - Local embeddings (Phase 2.4) are also feature-gated:
+   - Enable with `--features embeddings` (downloads model on first use)
+   - Or use `--features mvp` to enable both `embeddings` + `lancedb`
 
 ### MCP tools (current)
 

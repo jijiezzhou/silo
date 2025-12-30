@@ -273,6 +273,7 @@ pub async fn call_tool(state: &SharedState, call: ToolCallParams) -> ToolResult 
 
                     let res = crate::ingest::process_file(
                         &state.db,
+                        &state.embedder,
                         &args.path,
                         max_text_bytes,
                         fs_cfg.chunk_tokens,
