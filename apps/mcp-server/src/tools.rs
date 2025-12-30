@@ -71,6 +71,19 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
+            name: "silo_search",
+            description: "Semantic search over indexed chunks (embed query + vector search).",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" },
+                    "top_k": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 }
+                },
+                "required": ["query"],
+                "additionalProperties": false
+            }),
+        },
+        ToolDefinition {
             name: "silo_get_config",
             description: "Returns the effective Silo configuration (including config file path).",
             input_schema: json!({
@@ -165,10 +178,10 @@ pub async fn call_tool(state: &SharedState, call: ToolCallParams) -> ToolResult 
                 Err(e) => err_text(format!("Invalid arguments: {e}")),
             }
         }
-        "silo_search_knowledge_base" | "search_knowledge_base" => {
+        "silo_search" | "silo_search_knowledge_base" | "search_knowledge_base" => {
             let args: Result<SearchKnowledgeBaseArgs, _> = serde_json::from_value(call.arguments);
             match args {
-                Ok(args) => match search_knowledge_base(&state.db, args).await {
+                Ok(args) => match silo_search(state, args.query, args.top_k).await {
                     Ok(v) => ok_json(v),
                     Err(e) => err_text(e),
                 },
@@ -328,6 +341,8 @@ struct ReadFileArgs {
 #[derive(Debug, Deserialize)]
 struct SearchKnowledgeBaseArgs {
     query: String,
+    #[serde(default)]
+    top_k: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -394,19 +409,29 @@ async fn read_file(args: ReadFileArgs) -> Result<Value, String> {
     Ok(json!({ "path": path.to_string_lossy(), "content": content }))
 }
 
-async fn search_knowledge_base(db: &DatabaseHandle, args: SearchKnowledgeBaseArgs) -> Result<Value, String> {
-    if !db.is_enabled() {
-        let reason = db
+async fn silo_search(state: &SharedState, query: String, top_k: Option<usize>) -> Result<Value, String> {
+    if !state.db.is_enabled() {
+        let reason = state
+            .db
             .disabled_reason()
             .unwrap_or("unknown reason")
             .to_string();
         return Err(format!("Knowledge base is disabled: {reason}"));
     }
 
-    let hits = db
-        .search_documents(&args.query)
+    let k = top_k.unwrap_or(10).clamp(1, 50);
+    let qvec = state
+        .embedder
+        .embed_query(query)
+        .await
+        .map_err(|e| format!("Embedding failed: {e}"))?;
+
+    let hits = state
+        .db
+        .search_chunks_by_vector(&qvec, k)
         .await
         .map_err(|e| format!("DB search failed: {e}"))?;
+
     Ok(json!({ "hits": hits }))
 }
 

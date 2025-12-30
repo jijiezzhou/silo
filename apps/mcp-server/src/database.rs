@@ -43,6 +43,12 @@ pub enum DbError {
 pub struct SearchHit {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub chunk_index: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_token: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_token: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub score: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_preview: Option<String>,
@@ -234,33 +240,35 @@ impl Database {
     }
 
     /// Searches documents (placeholder query embedding).
-    pub async fn search_documents(&self, query: &str) -> Result<Vec<SearchHit>, DbError> {
+    /// Vector search against stored chunks. Query embedding must match the DB schema dimension.
+    pub async fn search_chunks_by_vector(
+        &self,
+        query_embedding: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<SearchHit>, DbError> {
         #[cfg(feature = "lancedb")]
         {
             use futures::TryStreamExt;
             use lancedb::query::{ExecutableQuery, QueryBase};
-            let _ = query; // placeholder until real query embeddings
             let Database::Enabled(db) = self else {
                 return Ok(vec![]);
             };
 
-            let embedding = zero_embedding();
             let table = db.table.lock().await;
             let stream: lancedb::arrow::SendableRecordBatchStream = table
-                .vector_search(embedding.as_slice())?
+                .vector_search(query_embedding)?
                 .column("embedding")
-                .limit(10)
+                .limit(top_k)
                 .execute()
                 .await?;
 
             let batches = stream.try_collect::<Vec<arrow_array::RecordBatch>>().await?;
-            let hits = batches_to_hits(batches);
-            Ok(hits)
+            Ok(batches_to_hits(batches))
         }
 
         #[cfg(not(feature = "lancedb"))]
         {
-            let _ = query;
+            let _ = (query_embedding, top_k);
             Ok(vec![])
         }
     }
@@ -459,6 +467,9 @@ fn batches_to_hits(batches: Vec<arrow_array::RecordBatch>) -> Vec<SearchHit> {
 
         let content_opt = b.column_by_name("content").map(|c| c.as_string::<i32>());
         let distance_opt = b.column_by_name("_distance").map(|c| c.as_primitive::<arrow_array::types::Float32Type>());
+        let chunk_index_opt = b.column_by_name("chunk_index").map(|c| c.as_primitive::<arrow_array::types::Int64Type>());
+        let start_token_opt = b.column_by_name("start_token").map(|c| c.as_primitive::<arrow_array::types::Int64Type>());
+        let end_token_opt = b.column_by_name("end_token").map(|c| c.as_primitive::<arrow_array::types::Int64Type>());
 
         for i in 0..b.num_rows() {
             let path = paths.value(i).to_string();
@@ -466,7 +477,17 @@ fn batches_to_hits(batches: Vec<arrow_array::RecordBatch>) -> Vec<SearchHit> {
                 .as_ref()
                 .map(|c| preview(c.value(i), 240));
             let score = distance_opt.as_ref().map(|d| d.value(i));
-            hits.push(SearchHit { path, score, content_preview });
+            let chunk_index = chunk_index_opt.as_ref().map(|c| c.value(i));
+            let start_token = start_token_opt.as_ref().map(|c| c.value(i));
+            let end_token = end_token_opt.as_ref().map(|c| c.value(i));
+            hits.push(SearchHit {
+                path,
+                chunk_index,
+                start_token,
+                end_token,
+                score,
+                content_preview,
+            });
         }
     }
     hits
