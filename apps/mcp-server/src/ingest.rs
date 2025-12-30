@@ -33,8 +33,19 @@ pub async fn process_file(
     let path = expand_tilde(path);
     let path_str = path.to_string_lossy().to_string();
 
+    let file_meta = tokio::fs::metadata(&path)
+        .await
+        .ok();
+    let file_size_bytes = file_meta.as_ref().map(|m| m.len() as i64);
+    let file_mtime_epoch_secs = file_meta
+        .as_ref()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64);
+
     let extracted = extract_text(&path, max_text_bytes).await?;
     let extracted_chars = extracted.text.chars().count();
+    let file_hash = Some(blake3::hash(extracted.text.as_bytes()).to_hex().to_string());
 
     let chunks = chunk_by_whitespace_tokens(&extracted.text, chunk_tokens, chunk_overlap_tokens);
 
@@ -51,20 +62,21 @@ pub async fn process_file(
 
     // Store only if DB is enabled (feature `lancedb` and initialization succeeded).
     let stored = if db.is_enabled() {
-        for (ch, emb) in chunks.iter().zip(embeddings.iter()) {
-            let id = chunk_id(&path_str, ch.index, &ch.text);
-            db.add_chunk(
-                &id,
-                &path_str,
-                ch.index,
-                ch.start_token,
-                ch.end_token,
-                &ch.text,
-                emb,
-            )
-                .await
-                .map_err(|e| format!("DB insert failed: {e}"))?;
-        }
+        let rows = chunks
+            .iter()
+            .zip(embeddings.iter())
+            .map(|(ch, emb)| (ch.index, ch.start_token, ch.end_token, ch.text.clone(), emb.clone()))
+            .collect::<Vec<_>>();
+
+        db.replace_file_chunks(
+            &path_str,
+            file_mtime_epoch_secs,
+            file_size_bytes,
+            file_hash.clone(),
+            rows,
+        )
+        .await
+        .map_err(|e| format!("DB write failed: {e}"))?;
         true
     } else {
         false

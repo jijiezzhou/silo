@@ -56,7 +56,7 @@ impl Database {
     pub async fn new(data_dir: impl AsRef<Path>) -> Result<Self, DbError> {
         #[cfg(feature = "lancedb")]
         {
-            const TABLE_NAME: &str = "documents";
+            const TABLE_NAME: &str = "silo_chunks_v1";
             let data_dir = data_dir.as_ref().to_path_buf();
             tokio::fs::create_dir_all(&data_dir).await?;
             // lancedb 0.4.x: connect(...) returns a builder; call execute().await to connect.
@@ -121,6 +121,9 @@ impl Database {
                     chunk_index: 0,
                     start_token: 0,
                     end_token: 0,
+                    file_mtime_epoch_secs: None,
+                    file_size_bytes: None,
+                    file_hash: None,
                     content: content.to_string(),
                     embedding: zero_embedding(),
                 },
@@ -159,11 +162,73 @@ impl Database {
                     chunk_index,
                     start_token,
                     end_token,
+                    file_mtime_epoch_secs: None,
+                    file_size_bytes: None,
+                    file_hash: None,
                     content: content.to_string(),
                     embedding: embedding.to_vec(),
                 },
             )
             .await?;
+        }
+        Ok(())
+    }
+
+    /// Replace all chunks for a given file path:
+    /// 1) delete existing rows for that path
+    /// 2) batch-insert new rows
+    pub async fn replace_file_chunks(
+        &self,
+        path: &str,
+        file_mtime_epoch_secs: Option<i64>,
+        file_size_bytes: Option<i64>,
+        file_hash: Option<String>,
+        rows: Vec<(usize, usize, usize, String, Vec<f32>)>, // (chunk_index, start_token, end_token, content, embedding)
+    ) -> Result<(), DbError> {
+        #[cfg(not(feature = "lancedb"))]
+        {
+            let _ = (
+                path,
+                file_mtime_epoch_secs,
+                file_size_bytes,
+                &file_hash,
+                &rows,
+            );
+            return Ok(());
+        }
+        #[cfg(feature = "lancedb")]
+        {
+            let Database::Enabled(db) = self else {
+                return Ok(());
+            };
+
+            let mut table = db.table.lock().await;
+            delete_by_path(&mut table, path).await?;
+
+            let mut out_rows: Vec<Row> = Vec::with_capacity(rows.len());
+            for (chunk_index, start_token, end_token, content, embedding) in rows {
+                let id = blake3::hash(
+                    format!("{path}\n{chunk_index}\n{}", blake3::hash(content.as_bytes()).to_hex())
+                        .as_bytes(),
+                )
+                .to_hex()
+                .to_string();
+
+                out_rows.push(Row {
+                    id,
+                    path: path.to_string(),
+                    chunk_index,
+                    start_token,
+                    end_token,
+                    file_mtime_epoch_secs,
+                    file_size_bytes,
+                    file_hash: file_hash.clone(),
+                    content,
+                    embedding,
+                });
+            }
+
+            add_rows(&mut table, out_rows).await?;
         }
         Ok(())
     }
@@ -190,10 +255,14 @@ impl Database {
 
             let batches = stream.try_collect::<Vec<arrow_array::RecordBatch>>().await?;
             let hits = batches_to_hits(batches);
-            return Ok(hits);
+            Ok(hits)
         }
 
-        Ok(vec![])
+        #[cfg(not(feature = "lancedb"))]
+        {
+            let _ = query;
+            Ok(vec![])
+        }
     }
 }
 
@@ -219,6 +288,9 @@ struct Row {
     chunk_index: usize,
     start_token: usize,
     end_token: usize,
+    file_mtime_epoch_secs: Option<i64>,
+    file_size_bytes: Option<i64>,
+    file_hash: Option<String>,
     content: String,
     embedding: Vec<f32>,
 }
@@ -232,6 +304,9 @@ fn documents_schema() -> arrow_schema::SchemaRef {
         Field::new("chunk_index", DataType::Int64, false),
         Field::new("start_token", DataType::Int64, false),
         Field::new("end_token", DataType::Int64, false),
+        Field::new("file_mtime_epoch_secs", DataType::Int64, true),
+        Field::new("file_size_bytes", DataType::Int64, true),
+        Field::new("file_hash", DataType::Utf8, true),
         Field::new("content", DataType::Utf8, false),
         Field::new(
             "embedding",
@@ -270,6 +345,9 @@ async fn add_row(table: &mut lancedb::Table, row: Row) -> Result<(), DbError> {
     let chunk_index_arr = Arc::new(Int64Array::from(vec![row.chunk_index as i64]));
     let start_token_arr = Arc::new(Int64Array::from(vec![row.start_token as i64]));
     let end_token_arr = Arc::new(Int64Array::from(vec![row.end_token as i64]));
+    let file_mtime_arr = Arc::new(Int64Array::from(vec![row.file_mtime_epoch_secs]));
+    let file_size_arr = Arc::new(Int64Array::from(vec![row.file_size_bytes]));
+    let file_hash_arr = Arc::new(StringArray::from(vec![row.file_hash]));
     let content_arr = Arc::new(StringArray::from(vec![row.content]));
 
     let emb_list = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
@@ -286,6 +364,9 @@ async fn add_row(table: &mut lancedb::Table, row: Row) -> Result<(), DbError> {
             chunk_index_arr,
             start_token_arr,
             end_token_arr,
+            file_mtime_arr,
+            file_size_arr,
+            file_hash_arr,
             content_arr,
             emb_arr,
         ],
@@ -293,6 +374,78 @@ async fn add_row(table: &mut lancedb::Table, row: Row) -> Result<(), DbError> {
 
     let batches = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema);
     table.add(Box::new(batches)).execute().await?;
+    Ok(())
+}
+
+#[cfg(feature = "lancedb")]
+async fn add_rows(table: &mut lancedb::Table, rows: Vec<Row>) -> Result<(), DbError> {
+    use arrow_array::{
+        types::Float32Type, FixedSizeListArray, Int64Array, RecordBatch, RecordBatchIterator,
+        StringArray,
+    };
+
+    if rows.is_empty() {
+        return Ok(());
+    }
+
+    let schema = documents_schema();
+
+    let id_arr = Arc::new(StringArray::from(rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>()));
+    let path_arr =
+        Arc::new(StringArray::from(rows.iter().map(|r| r.path.as_str()).collect::<Vec<_>>()));
+    let chunk_index_arr =
+        Arc::new(Int64Array::from(rows.iter().map(|r| r.chunk_index as i64).collect::<Vec<_>>()));
+    let start_token_arr =
+        Arc::new(Int64Array::from(rows.iter().map(|r| r.start_token as i64).collect::<Vec<_>>()));
+    let end_token_arr =
+        Arc::new(Int64Array::from(rows.iter().map(|r| r.end_token as i64).collect::<Vec<_>>()));
+
+    let file_mtime_arr =
+        Arc::new(Int64Array::from(rows.iter().map(|r| r.file_mtime_epoch_secs).collect::<Vec<_>>()));
+    let file_size_arr =
+        Arc::new(Int64Array::from(rows.iter().map(|r| r.file_size_bytes).collect::<Vec<_>>()));
+    let file_hash_arr = Arc::new(StringArray::from(
+        rows.iter().map(|r| r.file_hash.as_deref()).collect::<Vec<_>>(),
+    ));
+
+    let content_arr =
+        Arc::new(StringArray::from(rows.iter().map(|r| r.content.as_str()).collect::<Vec<_>>()));
+
+    let emb_list = FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+        rows.into_iter().map(|r| {
+            Some(r.embedding.into_iter().map(Some).collect::<Vec<_>>())
+        }),
+        EMBEDDING_DIM as i32,
+    );
+    let emb_arr = Arc::new(emb_list);
+
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            id_arr,
+            path_arr,
+            chunk_index_arr,
+            start_token_arr,
+            end_token_arr,
+            file_mtime_arr,
+            file_size_arr,
+            file_hash_arr,
+            content_arr,
+            emb_arr,
+        ],
+    )?;
+
+    let batches = RecordBatchIterator::new(vec![Ok(batch)].into_iter(), schema);
+    table.add(Box::new(batches)).execute().await?;
+    Ok(())
+}
+
+#[cfg(feature = "lancedb")]
+async fn delete_by_path(table: &mut lancedb::Table, path: &str) -> Result<(), DbError> {
+    // NOTE: LanceDB expects SQL predicate strings.
+    let escaped = path.replace('\'', "''");
+    let predicate = format!("path = '{escaped}'");
+    table.delete(&predicate).await?;
     Ok(())
 }
 
