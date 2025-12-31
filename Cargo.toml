@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "apps/mcp-server",
+  "apps/desktop-ui/src-tauri",
   # Future:
   # "apps/desktop-ui",
   # "crates/silo-core",

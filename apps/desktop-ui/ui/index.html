@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Silo</title>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system; margin: 24px; }
+      .row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
+      input { width: 520px; padding: 8px; }
+      button { padding: 8px 12px; }
+      pre { background: #111; color: #ddd; padding: 12px; border-radius: 8px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h2>Silo (MVP)</h2>
+
+    <div class="row">
+      <button id="btnConfig">Get Config</button>
+      <button id="btnIndex">Index Home (max 200)</button>
+    </div>
+
+    <div class="row">
+      <input id="q" placeholder="Search query..." />
+      <button id="btnSearch">Search</button>
+    </div>
+
+    <pre id="out">Ready.</pre>
+
+    <script type="module">
+      const out = document.getElementById("out");
+      const q = document.getElementById("q");
+
+      function show(v) {
+        out.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+      }
+
+      const invoke = globalThis.__TAURI__?.core?.invoke;
+      if (!invoke) {
+        show({
+          error: "Tauri IPC not available (window.__TAURI__ is missing). Are you opening ui/index.html in a normal browser, or is tauri.conf devUrl pointing somewhere else?",
+          hint: "Run the desktop app (Tauri WebView) so `invoke(...)` works.",
+        });
+      }
+
+      document.getElementById("btnConfig").onclick = async () => {
+        try {
+          if (!invoke) throw new Error("Tauri IPC not available");
+          show("Loading...");
+          show(await invoke("get_config"));
+        } catch (e) {
+          show({ error: String(e) });
+        }
+      };
+      document.getElementById("btnIndex").onclick = async () => {
+        try {
+          if (!invoke) throw new Error("Tauri IPC not available");
+          show("Loading...");
+          show(await invoke("index_home", { max_files: 200, concurrency: 2 }));
+        } catch (e) {
+          show({ error: String(e) });
+        }
+      };
+      document.getElementById("btnSearch").onclick = async () => {
+        try {
+          if (!invoke) throw new Error("Tauri IPC not available");
+          show("Loading...");
+          show(await invoke("search", { query: q.value, top_k: 5 }));
+        } catch (e) {
+          show({ error: String(e) });
+        }
+      };
+    </script>
+  </body>
+</html>
+
+

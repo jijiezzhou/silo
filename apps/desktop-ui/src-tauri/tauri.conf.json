@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Silo",
+  "version": "0.1.0",
+  "identifier": "com.silo.desktop",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": null,
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Silo",
+        "width": 1000,
+        "height": 700
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}
+
+
