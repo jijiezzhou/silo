@@ -115,6 +115,9 @@ fn default_exclude_globs() -> Vec<String> {
         // Big hidden caches
         "**/.cache/**".into(),
         "**/Library/**".into(), // macOS app support can be huge/noisy; user can re-add if desired
+        // App bundles & photo libraries (avoid huge/noisy + macOS privacy prompts)
+        "**/*.app/**".into(),
+        "**/*.photoslibrary/**".into(),
     ]
 }
 

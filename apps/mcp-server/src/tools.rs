@@ -84,6 +84,18 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
             }),
         },
         ToolDefinition {
+            name: "silo_index_home",
+            description: "Bulk index configured roots under ~ (extract -> chunk -> embed -> store). Use with --features mvp for real embeddings + DB.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "max_files": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+                    "concurrency": { "type": "integer", "minimum": 1, "maximum": 16, "default": 2 }
+                },
+                "additionalProperties": false
+            }),
+        },
+        ToolDefinition {
             name: "silo_get_config",
             description: "Returns the effective Silo configuration (including config file path).",
             input_schema: json!({
@@ -304,6 +316,36 @@ pub async fn call_tool(state: &SharedState, call: ToolCallParams) -> ToolResult 
                 Err(e) => err_text(format!("Invalid arguments: {e}")),
             }
         }
+        "silo_index_home" => {
+            let args: Result<IndexHomeArgs, _> = serde_json::from_value(call.arguments);
+            match args {
+                Ok(args) => {
+                    let Some(policy) = state.filesystem_policy().await else {
+                        return err_text("No filesystem policy configured".to_string());
+                    };
+                    let roots = state.filesystem_roots().await;
+                    let opts = crate::indexer::IndexOptions {
+                        max_files: args.max_files,
+                        concurrency: args.concurrency.unwrap_or(2),
+                        max_sample_errors: 20,
+                    };
+
+                    let summary = crate::indexer::index_roots(
+                        roots,
+                        std::sync::Arc::new(policy),
+                        state.db.clone(),
+                        state.embedder.clone(),
+                        opts,
+                    )
+                    .await;
+
+                    ok_json(serde_json::to_value(summary).unwrap_or_else(|e| {
+                        json!({"error": format!("failed to serialize index summary: {e}")})
+                    }))
+                }
+                Err(e) => err_text(format!("Invalid arguments: {e}")),
+            }
+        }
         other => err_text(format!("Unknown tool: {other}")),
     }
 }
@@ -368,6 +410,14 @@ struct PreviewExtractArgs {
 #[derive(Debug, Deserialize)]
 struct IngestFileArgs {
     path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct IndexHomeArgs {
+    #[serde(default)]
+    max_files: Option<u64>,
+    #[serde(default)]
+    concurrency: Option<usize>,
 }
 
 async fn list_files(args: ListFilesArgs) -> Result<Value, String> {

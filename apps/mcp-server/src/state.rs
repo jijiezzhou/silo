@@ -138,6 +138,10 @@ impl AppState {
         let cfg = self.config.read().await;
         filesystem_source_owned(&cfg)
     }
+
+    pub async fn filesystem_policy(&self) -> Option<CompiledFileSystemPolicy> {
+        self.fs_policy.read().await.clone()
+    }
 }
 
 fn filesystem_source(cfg: &SiloConfig) -> Option<&FileSystemSourceConfig> {

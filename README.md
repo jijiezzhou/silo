@@ -22,6 +22,10 @@ Silo stores a local config file to keep indexing policy safe and controllable:
 - Override: set `SILO_CONFIG_PATH`
 
 By default, filesystem indexing roots are set to your **home directory** (`~`) with conservative exclusions (e.g. `.git/`, `node_modules/`, `target/`, secrets, caches).
+For MVP bulk indexing, we also recommend excluding app bundles and Photos libraries:
+
+- `**/*.app/**`
+- `**/*.photoslibrary/**`
 
 ### Repo layout
 
@@ -85,6 +89,32 @@ echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"silo_list_
 - `silo_preview_extract` (Phase 2.2: extract text from file/PDF and return a preview)
 - `silo_ingest_file` (Phase 2.3: extract + chunk + store chunks to DB when enabled)
 - `silo_search` (Phase 2.6: semantic search over indexed chunks)
+- `silo_index_home` (MVP: bulk index configured roots)
 - `silo_search_knowledge_base` (disabled unless built with `--features lancedb`)
+
+### MVP workflow
+
+1) Build/run with full MVP features:
+
+```bash
+cd /Users/zjzhou/Desktop/projects/silo
+cargo run -q -p mcp-server --features mvp
+```
+
+2) Bulk index (limit to a small number first):
+
+```bash
+cat <<'JSON' | cargo run -q -p mcp-server --features mvp
+{"jsonrpc":"2.0","id":100,"method":"tools/call","params":{"name":"silo_index_home","arguments":{"max_files":200,"concurrency":2}}}
+JSON
+```
+
+3) Search:
+
+```bash
+cat <<'JSON' | cargo run -q -p mcp-server --features mvp
+{"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"silo_search","arguments":{"query":"chief of staff local-first","top_k":5}}}
+JSON
+```
 
 

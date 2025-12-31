@@ -5,6 +5,7 @@ mod extract;
 mod chunk;
 mod ingest;
 mod embed;
+mod indexer;
 mod server;
 mod state;
 mod tools;
