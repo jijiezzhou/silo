@@ -35,6 +35,18 @@ pub struct ToolResult {
 pub fn tool_definitions() -> Vec<ToolDefinition> {
     vec![
         ToolDefinition {
+            name: "silo_agent",
+            description: "Local LLM agent: chooses ONE tool call to satisfy a natural-language task, then executes it.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "task": { "type": "string", "description": "Natural language task for the agent." }
+                },
+                "required": ["task"],
+                "additionalProperties": false
+            }),
+        },
+        ToolDefinition {
             name: "silo_list_files",
             description: "Scans a local folder non-recursively.",
             input_schema: json!({
@@ -165,8 +177,25 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
     ]
 }
 
+/// Public tool dispatcher (includes `silo_agent`).
 pub async fn call_tool(state: &SharedState, call: ToolCallParams) -> ToolResult {
+    if call.name == "silo_agent" {
+        return match crate::agent::agent_tool(state, call.arguments).await {
+            Ok(v) => ok_json(v),
+            Err(e) => err_text(e),
+        };
+    }
+
+    call_tool_no_agent(state, call).await
+}
+
+/// Tool dispatcher used by the agent itself.
+///
+/// IMPORTANT: This function MUST NOT reference `crate::agent::agent_tool` (even indirectly),
+/// otherwise Rust will treat the futures as potentially recursive.
+pub(crate) async fn call_tool_no_agent(state: &SharedState, call: ToolCallParams) -> ToolResult {
     match call.name.as_str() {
+        "silo_agent" => err_text("Agent recursion is not allowed".to_string()),
         // New canonical names:
         "silo_list_files" |
         // Backward-compatible aliases:

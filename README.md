@@ -30,7 +30,7 @@ For MVP bulk indexing, we also recommend excluding app bundles and Photos librar
 ### Repo layout
 
 - `apps/mcp-server`: MCP server (Rust 2024, Tokio, stdio JSON-RPC, MCP tools)
-- `apps/desktop-ui`: Tauri desktop app (planned)
+- `apps/desktop-ui`: Tauri desktop app (MVP UI)
 - `crates/`: shared Rust crates (planned)
 
 ### Dev
@@ -114,6 +114,49 @@ JSON
 ```bash
 cat <<'JSON' | cargo run -q -p mcp-server --features mvp
 {"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"silo_search","arguments":{"query":"chief of staff local-first","top_k":5}}}
+JSON
+```
+
+### Tauri UI (Desktop)
+
+From repo root:
+
+```bash
+cd /Users/zjzhou/Desktop/projects/silo
+cargo tauri dev -p silo-desktop
+```
+
+### Local LLM (Ollama) + Agent tool
+
+Silo can use a **local LLM** (no cloud API) via the `ollama` CLI, and expose a simple agent tool
+that picks one of Silo's tools and executes it.
+
+#### 1) Install and pull a model
+
+- Install Ollama (`brew install ollama` or download the app), then:
+
+```bash
+ollama pull llama3.2:3b
+```
+
+#### 2) Run the MCP server with the local LLM enabled
+
+Set environment variables before launching (important for GUI apps that may not inherit your shell PATH):
+
+```bash
+export SILO_LLM_BACKEND=ollama
+export SILO_LLM_MODEL=llama3.2:3b
+# Optional if your GUI app can't find ollama in PATH:
+# export SILO_OLLAMA_PATH=/opt/homebrew/bin/ollama
+```
+
+#### 3) Use the agent tool
+
+Example:
+
+```bash
+cat <<'JSON' | cargo run -q -p mcp-server --features mvp
+{"jsonrpc":"2.0","id":200,"method":"tools/call","params":{"name":"silo_agent","arguments":{"task":"search all pdfs I have"}}}
 JSON
 ```
 

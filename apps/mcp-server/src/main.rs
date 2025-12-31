@@ -1,17 +1,5 @@
-mod database;
-mod config;
-mod filesystem;
-mod extract;
-mod chunk;
-mod ingest;
-mod embed;
-mod indexer;
-mod server;
-mod state;
-mod tools;
-
-use crate::database::Database;
-use crate::state::AppState;
+use mcp_server::database::Database;
+use mcp_server::state::AppState;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -36,7 +24,7 @@ async fn main() {
         }
     };
 
-    if let Err(e) = server::run_stdio_server(state).await {
+    if let Err(e) = mcp_server::server::run_stdio_server(state).await {
         eprintln!("Server stopped with error: {e}");
     }
 }

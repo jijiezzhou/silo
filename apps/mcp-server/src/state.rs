@@ -4,6 +4,7 @@ use crate::config::{
 };
 use crate::database::DatabaseHandle;
 use crate::embed::{EmbedderHandle, NoopEmbedder};
+use crate::llm::{llm_from_env, LlmHandle};
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub config: RwLock<SiloConfig>,
     pub fs_policy: RwLock<Option<CompiledFileSystemPolicy>>,
     pub embedder: EmbedderHandle,
+    pub llm: LlmHandle,
 }
 
 impl AppState {
@@ -48,12 +50,15 @@ impl AppState {
             }
         };
 
+        let llm = llm_from_env();
+
         Ok(Arc::new(Self {
             db,
             config_path,
             config: RwLock::new(cfg),
             fs_policy: RwLock::new(fs_policy),
             embedder,
+            llm,
         }))
     }
 
