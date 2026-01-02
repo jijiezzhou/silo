@@ -35,10 +35,19 @@
         out.textContent = typeof v === "string" ? v : JSON.stringify(v, null, 2);
       }
 
-      const invoke = globalThis.__TAURI__?.core?.invoke;
+      // Tauri v2: the stable JS API package uses `__TAURI_INTERNALS__`.
+      // Some setups may also expose `__TAURI__.core.invoke`. Support both.
+      const invoke =
+        globalThis.__TAURI__?.core?.invoke ??
+        globalThis.__TAURI_INTERNALS__?.invoke;
       if (!invoke) {
         show({
-          error: "Tauri IPC not available (window.__TAURI__ is missing). Are you opening ui/index.html in a normal browser, or is tauri.conf devUrl pointing somewhere else?",
+          error:
+            "Tauri IPC not available (missing JS bridge). Are you opening ui/index.html in a normal browser, or is the webview not injecting the Tauri bridge?",
+          debug: {
+            has___TAURI__: Boolean(globalThis.__TAURI__),
+            has___TAURI_INTERNALS__: Boolean(globalThis.__TAURI_INTERNALS__),
+          },
           hint: "Run the desktop app (Tauri WebView) so `invoke(...)` works.",
         });
       }

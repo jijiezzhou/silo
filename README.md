@@ -123,7 +123,14 @@ From repo root:
 
 ```bash
 cd /Users/zjzhou/Desktop/projects/silo
-cargo tauri dev -p silo-desktop
+(cd apps/desktop-ui/src-tauri && cargo tauri dev)
+```
+
+Or run directly from the Tauri crate directory:
+
+```bash
+cd /Users/zjzhou/Desktop/projects/silo/apps/desktop-ui/src-tauri
+cargo tauri dev
 ```
 
 ### Local LLM (Ollama) + Agent tool

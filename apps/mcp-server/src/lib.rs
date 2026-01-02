@@ -8,6 +8,7 @@ pub mod filesystem;
 pub mod indexer;
 pub mod ingest;
 pub mod llm;
+pub mod api;
 pub mod server;
 pub mod state;
 pub mod tools;
