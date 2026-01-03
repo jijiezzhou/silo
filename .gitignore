@@ -2,3 +2,7 @@
 **/*.rs.bk
 .DS_Store
 .env
+
+# Runtime / local caches (do not commit)
+data/
+.fastembed_cache/
