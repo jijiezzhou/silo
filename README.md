@@ -14,6 +14,32 @@ This repository currently contains **Milestone 1** of the Data Layer: a standalo
 - **Tools**: `tools/list` + `tools/call` ✅
 - **Zero-panic**: errors return structured JSON / error strings (no crashing) ✅
 
+### Roadmap / TODO (Upcoming milestones)
+
+#### Milestone 2 — “Useful agent loop” (local-first)
+
+- [ ] Upgrade `silo_agent` from single-call routing to a multi-step loop (plan → tool calls → final answer)
+- [ ] Add structured “thoughtless” planning format (JSON plan + tool calls + citations) and retries on invalid JSON
+- [ ] Add guardrails: max steps, timeouts, tool allowlist per request, and audit log of tool calls
+
+#### Milestone 3 — “Documents you can talk to” (PDF + filesystem)
+
+- [ ] Add safe recursive file discovery tool (e.g. “find PDFs under ~/Downloads”)
+- [ ] Add “summarize file / summarize folder” tools (extract → LLM summary), with size limits and redaction hooks
+- [ ] Add incremental indexing (hash/mtime) + per-directory scoping (don’t force indexing all of `~`)
+
+#### Milestone 4 — “Personal ops” (calendar/tasks)
+
+- [ ] Calendar read tools: list events, find free slots, summarize upcoming week
+- [ ] Calendar write tools: create/update events with confirmations
+- [ ] Task integration (Reminders/Todoist/etc.) behind the same permission model
+
+#### Milestone 5 — “Product-grade desktop”
+
+- [ ] Tauri UI: “Ask” chat panel + tool trace + progress UI for long-running indexing
+- [ ] Onboarding: pick folders to index, explain exclusions, show privacy guarantees
+- [ ] Packaging: signed builds, auto-update, crash reporting (local-only by default)
+
 ### Configuration (Phase 2.0)
 
 Silo stores a local config file to keep indexing policy safe and controllable:
