@@ -48,7 +48,7 @@ Silo stores a local config file to keep indexing policy safe and controllable:
 - Override: set `SILO_CONFIG_PATH`
 
 By default, filesystem indexing roots are set to your **home directory** (`~`) with conservative exclusions (e.g. `.git/`, `node_modules/`, `target/`, secrets, caches).
-For MVP bulk indexing, we also recommend excluding app bundles and Photos libraries:
+For MVP bulk indexing, we also exclude app bundles and Photos libraries by default (to avoid huge/noisy folders and macOS privacy prompts):
 
 - `**/*.app/**`
 - `**/*.photoslibrary/**`
