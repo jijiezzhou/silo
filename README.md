@@ -4,7 +4,7 @@ Local-first AI "Chief of Staff" desktop app.
 
 ### What is this repo?
 
-Silo is a **local-first** desktop app (planned: **Tauri**) that acts like an AI “Chief of Staff” for your personal and project context.
+Silo is a **local-first** desktop app (**Tauri**) that acts like an AI “Chief of Staff” for your personal and project context.
 
 This repository currently contains **Milestone 1** of the Data Layer: a standalone **MCP (Model Context Protocol) server** written in Rust that runs locally and exposes file/query tools to an LLM client (e.g. Claude Desktop).
 
