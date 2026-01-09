@@ -68,6 +68,12 @@ For MVP bulk indexing, we also exclude app bundles and Photos libraries by defau
 - For PDF extraction (Phase 2.2): **`pdftotext`** via Poppler (`brew install poppler`)
 - For local LLM agent: **Ollama** (`brew install ollama`)
 
+macOS quick install:
+
+```bash
+brew install protobuf poppler ollama
+```
+
 #### Build/run MCP server
 
 ```bash
