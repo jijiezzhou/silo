@@ -171,6 +171,12 @@ cargo tauri dev
 Silo can use a **local LLM** (no cloud API) via the `ollama` CLI, and expose a simple agent tool
 that picks one of Silo's tools and executes it.
 
+#### 0) Start Ollama
+
+```bash
+ollama serve
+```
+
 #### 1) Install and pull a model
 
 - Install Ollama (`brew install ollama` or download the app), then:
