@@ -166,6 +166,9 @@ cd /Users/zjzhou/Desktop/projects/silo/apps/desktop-ui/src-tauri
 cargo tauri dev
 ```
 
+Note: the current UI buttons call the embedded Rust backend commands (`get_config`, `index_home`, `search`).
+The Ollama-powered agent is exposed via MCP as `silo_agent` (see below); it is not wired into the UI yet.
+
 ### Local LLM (Ollama) + Agent tool
 
 Silo can use a **local LLM** (no cloud API) via the `ollama` CLI, and expose a simple agent tool
