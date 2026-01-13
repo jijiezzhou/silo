@@ -168,6 +168,7 @@ cargo tauri dev
 
 Note: the current UI buttons call the embedded Rust backend commands (`get_config`, `index_home`, `search`).
 The Ollama-powered agent is exposed via MCP as `silo_agent` (see below); it is not wired into the UI yet.
+If you open `apps/desktop-ui/ui/index.html` in a normal browser, Tauri IPC will not be available.
 
 ### Local LLM (Ollama) + Agent tool
 
@@ -208,5 +209,10 @@ cat <<'JSON' | cargo run -q -p mcp-server --features mvp
 {"jsonrpc":"2.0","id":200,"method":"tools/call","params":{"name":"silo_agent","arguments":{"task":"search all pdfs I have"}}}
 JSON
 ```
+
+Troubleshooting:
+
+- If you see “could not connect to a running Ollama instance”: run `ollama serve` and keep it running.
+- If you see “Failed to spawn ollama CLI”: set `SILO_OLLAMA_PATH` to the absolute path (e.g. `/opt/homebrew/bin/ollama`).
 
 
