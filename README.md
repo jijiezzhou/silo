@@ -64,6 +64,7 @@ For MVP bulk indexing, we also exclude app bundles and Photos libraries by defau
 #### Prerequisites
 
 - **Rust toolchain**: install via `rustup`
+- **Tauri CLI** (for `cargo tauri ...`): `cargo install tauri-cli`
 - Required for `--features lancedb` / `--features mvp` (including building the desktop UI): **`protoc`** (protobuf compiler)
 - For PDF extraction (Phase 2.2): **`pdftotext`** via Poppler (`brew install poppler`)
 - For local LLM agent: **Ollama** (`brew install ollama`)
