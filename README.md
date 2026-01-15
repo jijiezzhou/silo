@@ -1,4 +1,4 @@
-## Silo
+## Silo — local-first AI Chief of Staff
 
 Local-first AI "Chief of Staff" desktop app.
 
