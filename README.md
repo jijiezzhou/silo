@@ -1,4 +1,4 @@
-## Silo — local-first AI chief of staff (WIP, local-first)
+## Silo — local-first AI chief of staff (WIP)
 
 Local-first AI "Chief of Staff" desktop app.
 
