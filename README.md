@@ -1,6 +1,6 @@
 ## Silo — local-first AI chief of staff (alpha)
 
-Local-first AI Chief of Staff desktop app (WIP).
+Local-first AI Chief of Staff desktop app (alpha).
 
 ### What is this repo?
 
