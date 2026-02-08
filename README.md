@@ -2,7 +2,7 @@
 
 Local-first AI chief-of-staff desktop app (alpha, WIP).
 
-### What is this project?
+### What is this project / repository?
 
 Silo is a **local-first** desktop app (**Tauri**) that acts like an AI “Chief of Staff” for your personal and project context.
 
