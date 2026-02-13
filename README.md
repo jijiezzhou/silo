@@ -53,7 +53,7 @@ For MVP bulk indexing, we also exclude app bundles and Photos libraries by defau
 - `**/*.app/**`
 - `**/*.photoslibrary/**`
 
-### Repo layout
+### Repository layout
 
 - `apps/mcp-server`: MCP server (Rust 2024, Tokio, stdio JSON-RPC, MCP tools)
 - `apps/desktop-ui`: Tauri desktop app (MVP UI)
